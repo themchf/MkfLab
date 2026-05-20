@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MKF Lab | Patient Portal</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="logo">
+                <span class="logo-mark"></span>
+                <h1>MKF Lab</h1>
+            </div>
+            <button id="btn-home" class="btn-text hidden">Return Home</button>
+        </header>
+
+        <main class="app-main">
+            <!-- View: Role Selection -->
+            <section id="view-home" class="view active">
+                <div class="card role-selector">
+                    <h2>Welcome to MKF Lab</h2>
+                    <p class="subtitle">Please select your portal to continue.</p>
+                    <div class="action-grid">
+                        <button id="nav-guest" class="btn-primary btn-large">Guest Portal</button>
+                        <button id="nav-admin" class="btn-secondary btn-large">Admin Portal</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- View: Guest Portal -->
+            <section id="view-guest" class="view hidden">
+                <div class="card">
+                    <h2>Retrieve Lab Results</h2>
+                    <p class="subtitle">Enter your secure code to access your PDF.</p>
+                    
+                    <form id="form-guest" class="form-group">
+                        <label for="guest-code">Access Code</label>
+                        <input type="text" id="guest-code" placeholder="e.g., LAB-1029" required autocomplete="off">
+                        <button type="submit" class="btn-primary w-full">View Document</button>
+                    </form>
+
+                    <div id="guest-error" class="alert alert-error hidden"></div>
+                    
+                    <div id="guest-result" class="result-container hidden">
+                        <div class="file-card">
+                            <div class="file-info">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                                <span id="result-filename">document.pdf</span>
+                            </div>
+                            <a id="btn-download" href="#" download="MKF_Lab_Result.pdf" class="btn-primary">Download PDF</a>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- View: Admin Auth -->
+            <section id="view-admin-auth" class="view hidden">
+                <div class="card">
+                    <h2>Admin Authentication</h2>
+                    <p class="subtitle">Restricted access area.</p>
+                    
+                    <form id="form-admin-login" class="form-group">
+                        <label for="admin-pass">Administrator Password</label>
+                        <input type="password" id="admin-pass" placeholder="Enter password" required>
+                        <button type="submit" class="btn-primary w-full">Authenticate</button>
+                    </form>
+                    <div id="auth-error" class="alert alert-error hidden">Invalid credentials.</div>
+                </div>
+            </section>
+
+            <!-- View: Admin Dashboard -->
+            <section id="view-admin-dash" class="view hidden">
+                <div class="card dashboard-card">
+                    <div class="dashboard-header">
+                        <h2>Document Management</h2>
+                        <button id="btn-logout" class="btn-text text-danger">Sign Out</button>
+                    </div>
+                    
+                    <form id="form-upload" class="form-group upload-form">
+                        <div class="input-row">
+                            <div class="input-col">
+                                <label for="assign-code">Assign Access Code</label>
+                                <input type="text" id="assign-code" placeholder="Create a unique code" required>
+                            </div>
+                            <div class="input-col">
+                                <label for="upload-pdf">Select PDF Document</label>
+                                <input type="file" id="upload-pdf" accept="application/pdf" required>
+                            </div>
+                        </div>
+                        <button type="submit" id="btn-upload" class="btn-primary">Secure & Upload Document</button>
+                    </form>
+
+                    <div id="upload-status" class="alert hidden"></div>
+
+                    <div class="database-preview">
+                        <h3>Active Documents</h3>
+                        <div class="table-container">
+                            <table id="doc-table">
+                                <thead>
+                                    <tr>
+                                        <th>Access Code</th>
+                                        <th>Filename</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="doc-list">
+                                    <!-- Populated by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
