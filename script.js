@@ -3,25 +3,45 @@ document.addEventListener('DOMContentLoaded', () => {
     const WORKER_URL = "https://mkflab.michaelsuperhand.workers.dev"; 
     const ADMIN_SECRET = "AdminMKFLab"; 
 
+    // Safe DOM selector to prevent crashes
+    const el = (id) => document.getElementById(id);
+
     const views = {
-        home: document.getElementById('view-home'),
-        guest: document.getElementById('view-guest'),
-        adminAuth: document.getElementById('view-admin-auth'),
-        adminDash: document.getElementById('view-admin-dash')
+        home: el('view-home'),
+        guest: el('view-guest'),
+        adminAuth: el('view-admin-auth'),
+        adminDash: el('view-admin-dash')
     };
 
-    const btnHome = document.getElementById('btn-home');
-    let currentBlobUrl = null; // Track to prevent browser memory leaks
+    const btnHome = el('btn-home');
+    let currentBlobUrl = null;
 
     function switchView(viewId) {
-        Object.values(views).forEach(v => v.classList.add('hidden'));
-        views[viewId].classList.remove('hidden');
-        btnHome.classList.toggle('hidden', viewId === 'home');
+        Object.values(views).forEach(v => {
+            if (v) v.classList.add('hidden');
+        });
+        if (views[viewId]) {
+            views[viewId].classList.remove('hidden');
+        }
+        if (btnHome) {
+            btnHome.classList.toggle('hidden', viewId === 'home');
+        }
     }
 
-    // --- Navigation ---
-    document.getElementById('nav-guest').addEventListener('click', () => switchView('guest'));
-    document.getElementById('nav-admin').addEventListener('click', () => {
+    // Safe event listener wrapper
+    const addSafeListener = (id, event, handler) => {
+        const element = el(id);
+        if (element) {
+            element.addEventListener(event, handler);
+        } else {
+            console.warn(`MKF Lab Warning: Element #${id} not found.`);
+        }
+    };
+
+    // --- Navigation Bindings ---
+    addSafeListener('nav-guest', 'click', () => switchView('guest'));
+    
+    addSafeListener('nav-admin', 'click', () => {
         if (sessionStorage.getItem('mkf_admin_auth') === 'true') {
             switchView('adminDash');
             renderAdminTable();
@@ -29,21 +49,22 @@ document.addEventListener('DOMContentLoaded', () => {
             switchView('adminAuth');
         }
     });
-    btnHome.addEventListener('click', () => {
+
+    addSafeListener('btn-home', 'click', () => {
         switchView('home');
         resetForms();
     });
 
-    // --- Admin Authentication (Frontend Guard) ---
-    document.getElementById('form-admin-login').addEventListener('submit', (e) => {
+    // --- Admin Authentication ---
+    addSafeListener('form-admin-login', 'submit', (e) => {
         e.preventDefault();
-        const pass = document.getElementById('admin-pass').value;
-        const errorDiv = document.getElementById('auth-error');
+        const pass = el('admin-pass').value;
+        const errorDiv = el('auth-error');
 
         if (pass === ADMIN_SECRET) {
             sessionStorage.setItem('mkf_admin_auth', 'true');
             errorDiv.classList.add('hidden');
-            document.getElementById('admin-pass').value = '';
+            el('admin-pass').value = '';
             switchView('adminDash');
             renderAdminTable();
         } else {
@@ -51,19 +72,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    document.getElementById('btn-logout').addEventListener('click', () => {
+    addSafeListener('btn-logout', 'click', () => {
         sessionStorage.removeItem('mkf_admin_auth');
         switchView('home');
     });
 
     // --- Admin Operations ---
-    document.getElementById('form-upload').addEventListener('submit', async (e) => {
+    addSafeListener('form-upload', 'submit', async (e) => {
         e.preventDefault();
-        
-        const code = document.getElementById('assign-code').value.trim();
-        const fileInput = document.getElementById('upload-pdf').files[0];
-        const statusDiv = document.getElementById('upload-status');
-        const btn = document.getElementById('btn-upload');
+        const code = el('assign-code').value.trim();
+        const fileInput = el('upload-pdf').files[0];
+        const statusDiv = el('upload-status');
+        const btn = el('btn-upload');
 
         if (!fileInput || fileInput.type !== 'application/pdf') {
             showStatus(statusDiv, 'Please select a valid PDF file.', 'error');
@@ -71,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         btn.disabled = true;
-        btn.textContent = 'Syncing with Worker...';
+        btn.textContent = 'Syncing...';
 
         const reader = new FileReader();
         reader.readAsDataURL(fileInput);
@@ -93,7 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!response.ok) throw new Error(await response.text());
 
                 showStatus(statusDiv, `Document successfully linked to ${code.toUpperCase()}`, 'success');
-                document.getElementById('form-upload').reset();
+                el('form-upload').reset();
                 renderAdminTable();
             } catch (err) {
                 showStatus(statusDiv, `Upload Failed: ${err.message}`, 'error');
@@ -105,7 +125,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     async function renderAdminTable() {
-        const tbody = document.getElementById('doc-list');
+        const tbody = el('doc-list');
+        if (!tbody) return;
+        
         tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#64748b;">Loading records...</td></tr>';
 
         try {
@@ -149,14 +171,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Guest Operations (Optimized for New Tab View) ---
-    document.getElementById('form-guest').addEventListener('submit', async (e) => {
+    // --- Guest Operations (New Tab View Strategy) ---
+    addSafeListener('form-guest', 'submit', async (e) => {
         e.preventDefault();
         
-        const code = document.getElementById('guest-code').value.trim().toUpperCase();
-        const errorDiv = document.getElementById('guest-error');
-        const resultDiv = document.getElementById('guest-result');
-        const actionBtn = document.getElementById('btn-download');
+        const code = el('guest-code').value.trim().toUpperCase();
+        const errorDiv = el('guest-error');
+        const resultDiv = el('guest-result');
+        const actionBtn = el('btn-download');
         
         errorDiv.classList.add('hidden');
 
@@ -166,24 +188,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const doc = await response.json();
             
-            // Clean up memory from any previously viewed file in the same session
+            // Memory cleanup
             if (currentBlobUrl) {
                 URL.revokeObjectURL(currentBlobUrl);
             }
 
-            // Convert the Base64 data back to a raw binary PDF Blob
+            // Convert to a native browser file format
             const blob = base64ToBlob(doc.fileData);
             currentBlobUrl = URL.createObjectURL(blob);
             
-            // Display the file details container
+            // Show the result
             resultDiv.classList.remove('hidden');
-            document.getElementById('result-filename').textContent = doc.filename;
+            el('result-filename').textContent = doc.filename;
             
-            // Configure the button to act as a viewer link instead of a forcing downloadd
+            // Assign to the anchor tag exactly as requested
             actionBtn.href = currentBlobUrl;
-            actionBtn.textContent = "View PDF"; 
-            actionBtn.target = "_blank"; // Forces it to cleanly open in a secondary browser tab
-            actionBtn.removeAttribute('download'); // Stripping this prevents the forced file save dialog
+            actionBtn.target = "_blank"; // Opens in new tab
+            actionBtn.removeAttribute('download'); // Stops it from forcing a file download
             
         } catch (err) {
             resultDiv.classList.add('hidden');
@@ -194,23 +215,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Core Helper Utilities ---
     function base64ToBlob(base64String) {
-        const parts = base64String.split(',');
-        const base64Data = parts[1] || parts[0];
-        const contentType = parts[0].includes(':') ? parts[0].split(':')[1].split(';')[0] : 'application/pdf';
-        
-        const byteCharacters = atob(base64Data);
-        const byteArrays = [];
-        
-        for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-            const slice = byteCharacters.slice(offset, offset + 512);
-            const byteNumbers = new Array(slice.length);
-            for (let i = 0; i < slice.length; i++) {
-                byteNumbers[i] = slice.charCodeAt(i);
+        try {
+            const parts = base64String.split(',');
+            const base64Data = parts[1] || parts[0];
+            let contentType = 'application/pdf';
+            
+            if (parts[0].includes(':')) {
+                contentType = parts[0].split(':')[1].split(';')[0];
             }
-            byteArrays.push(new Uint8Array(byteNumbers));
+            
+            const byteCharacters = atob(base64Data);
+            const byteArrays = [];
+            
+            for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+                const slice = byteCharacters.slice(offset, offset + 512);
+                const byteNumbers = new Array(slice.length);
+                for (let i = 0; i < slice.length; i++) {
+                    byteNumbers[i] = slice.charCodeAt(i);
+                }
+                byteArrays.push(new Uint8Array(byteNumbers));
+            }
+            
+            return new Blob(byteArrays, { type: contentType });
+        } catch (error) {
+            throw new Error("File conversion error.");
         }
-        
-        return new Blob(byteArrays, { type: contentType });
     }
 
     function showStatus(element, message, type) {
@@ -221,10 +250,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function resetForms() {
-        document.getElementById('form-guest').reset();
-        document.getElementById('form-admin-login').reset();
-        document.getElementById('guest-error').classList.add('hidden');
-        document.getElementById('guest-result').classList.add('hidden');
-        document.getElementById('auth-error').classList.add('hidden');
+        el('form-guest')?.reset();
+        el('form-admin-login')?.reset();
+        el('guest-error')?.classList.add('hidden');
+        el('guest-result')?.classList.add('hidden');
+        el('auth-error')?.classList.add('hidden');
     }
 });
