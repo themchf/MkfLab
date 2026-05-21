@@ -11,6 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const btnHome = document.getElementById('btn-home');
+    let currentBlobUrl = null; // Used to manage memory for iOS Safari fix
 
     function switchView(viewId) {
         Object.values(views).forEach(v => v.classList.add('hidden'));
@@ -155,6 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const code = document.getElementById('guest-code').value.trim().toUpperCase();
         const errorDiv = document.getElementById('guest-error');
         const resultDiv = document.getElementById('guest-result');
+        const downloadBtn = document.getElementById('btn-download');
         
         errorDiv.classList.add('hidden');
 
@@ -167,9 +169,19 @@ document.addEventListener('DOMContentLoaded', () => {
             resultDiv.classList.remove('hidden');
             document.getElementById('result-filename').textContent = doc.filename;
             
-            const downloadBtn = document.getElementById('btn-download');
-            downloadBtn.href = doc.fileData;
+            // Clean up old memory if the user searched multiple times
+            if (currentBlobUrl) {
+                URL.revokeObjectURL(currentBlobUrl);
+            }
+
+            // Fix for iOS Safari: Convert Base64 to a raw binary Blob
+            const blob = base64ToBlob(doc.fileData);
+            currentBlobUrl = URL.createObjectURL(blob);
+            
+            downloadBtn.href = currentBlobUrl;
             downloadBtn.download = doc.filename;
+            downloadBtn.target = "_blank"; // Forces iOS to open the native PDF viewer sheet
+            
         } catch (err) {
             resultDiv.classList.add('hidden');
             errorDiv.textContent = err.message;
@@ -178,6 +190,28 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- Helpers ---
+    function base64ToBlob(base64String) {
+        // Safely split the base64 string regardless of prefix presence
+        const parts = base64String.split(',');
+        const base64Data = parts[1] || parts[0];
+        const contentType = parts[0].includes(':') ? parts[0].split(':')[1].split(';')[0] : 'application/pdf';
+        
+        const byteCharacters = atob(base64Data);
+        const byteArrays = [];
+        
+        // Process in chunks to prevent memory spikes on large files
+        for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+            const slice = byteCharacters.slice(offset, offset + 512);
+            const byteNumbers = new Array(slice.length);
+            for (let i = 0; i < slice.length; i++) {
+                byteNumbers[i] = slice.charCodeAt(i);
+            }
+            byteArrays.push(new Uint8Array(byteNumbers));
+        }
+        
+        return new Blob(byteArrays, { type: contentType });
+    }
+
     function showStatus(element, message, type) {
         element.textContent = message;
         element.className = `alert alert-${type}`;
