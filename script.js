@@ -1,7 +1,8 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // --- State & DOM Elements ---
-    const MOCK_ADMIN_PASS = "admin2024"; // The password required to access the admin panel
-    
+    // --- Configuration ---
+    const WORKER_URL = "https://mkf-lab.michaelsuperhand.workers.dev"; 
+    const ADMIN_SECRET = "AdminMKFLab"; 
+
     const views = {
         home: document.getElementById('view-home'),
         guest: document.getElementById('view-guest'),
@@ -11,21 +12,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const btnHome = document.getElementById('btn-home');
 
-    // --- Navigation Logic ---
     function switchView(viewId) {
         Object.values(views).forEach(v => v.classList.add('hidden'));
         views[viewId].classList.remove('hidden');
-        
-        if (viewId === 'home') {
-            btnHome.classList.add('hidden');
-        } else {
-            btnHome.classList.remove('hidden');
-        }
+        btnHome.classList.toggle('hidden', viewId === 'home');
     }
 
+    // --- Navigation ---
     document.getElementById('nav-guest').addEventListener('click', () => switchView('guest'));
     document.getElementById('nav-admin').addEventListener('click', () => {
-        // Check if already authenticated in this session
         if (sessionStorage.getItem('mkf_admin_auth') === 'true') {
             switchView('adminDash');
             renderAdminTable();
@@ -38,13 +33,13 @@ document.addEventListener('DOMContentLoaded', () => {
         resetForms();
     });
 
-    // --- Admin Authentication ---
+    // --- Admin Authentication (Frontend Guard) ---
     document.getElementById('form-admin-login').addEventListener('submit', (e) => {
         e.preventDefault();
         const pass = document.getElementById('admin-pass').value;
         const errorDiv = document.getElementById('auth-error');
 
-        if (pass === MOCK_ADMIN_PASS) {
+        if (pass === ADMIN_SECRET) {
             sessionStorage.setItem('mkf_admin_auth', 'true');
             errorDiv.classList.add('hidden');
             document.getElementById('admin-pass').value = '';
@@ -60,30 +55,11 @@ document.addEventListener('DOMContentLoaded', () => {
         switchView('home');
     });
 
-    // --- Database Simulation (Local Storage) ---
-    function getDatabase() {
-        const data = localStorage.getItem('mkf_lab_db');
-        return data ? JSON.parse(data) : {};
-    }
-
-    function saveToDatabase(code, filename, base64Data) {
-        const db = getDatabase();
-        db[code.toUpperCase()] = { filename, data: base64Data, date: new Date().toISOString() };
-        localStorage.setItem('mkf_lab_db', JSON.stringify(db));
-    }
-
-    function deleteFromDatabase(code) {
-        const db = getDatabase();
-        delete db[code];
-        localStorage.setItem('mkf_lab_db', JSON.stringify(db));
-        renderAdminTable();
-    }
-
-    // --- Admin Upload Logic ---
-    document.getElementById('form-upload').addEventListener('submit', (e) => {
+    // --- Admin Operations ---
+    document.getElementById('form-upload').addEventListener('submit', async (e) => {
         e.preventDefault();
         
-        const codeInput = document.getElementById('assign-code').value.trim();
+        const code = document.getElementById('assign-code').value.trim();
         const fileInput = document.getElementById('upload-pdf').files[0];
         const statusDiv = document.getElementById('upload-status');
         const btn = document.getElementById('btn-upload');
@@ -94,87 +70,114 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         btn.disabled = true;
-        btn.textContent = 'Processing...';
+        btn.textContent = 'Syncing with Worker...';
 
-        // Convert PDF to Base64 to store in local browser storage
         const reader = new FileReader();
         reader.readAsDataURL(fileInput);
-        reader.onload = () => {
-            const base64String = reader.result;
+        reader.onload = async () => {
             try {
-                saveToDatabase(codeInput, fileInput.name, base64String);
-                showStatus(statusDiv, `Document securely assigned to code: ${codeInput.toUpperCase()}`, 'success');
+                const response = await fetch(`${WORKER_URL}/api/upload`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${ADMIN_SECRET}`
+                    },
+                    body: JSON.stringify({
+                        code: code,
+                        filename: fileInput.name,
+                        fileData: reader.result
+                    })
+                });
+
+                if (!response.ok) throw new Error(await response.text());
+
+                showStatus(statusDiv, `Document successfully linked to ${code.toUpperCase()}`, 'success');
                 document.getElementById('form-upload').reset();
                 renderAdminTable();
             } catch (err) {
-                // LocalStorage has a ~5MB limit. Catch overflow.
-                showStatus(statusDiv, 'File too large. Browser storage limit exceeded.', 'error');
+                showStatus(statusDiv, `Upload Failed: ${err.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Secure & Upload Document';
             }
-            btn.disabled = false;
-            btn.textContent = 'Secure & Upload Document';
-        };
-        reader.onerror = () => {
-            showStatus(statusDiv, 'Error reading file.', 'error');
-            btn.disabled = false;
-            btn.textContent = 'Secure & Upload Document';
         };
     });
 
-    function renderAdminTable() {
-        const db = getDatabase();
+    async function renderAdminTable() {
         const tbody = document.getElementById('doc-list');
-        tbody.innerHTML = '';
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#64748b;">Loading records...</td></tr>';
 
-        if (Object.keys(db).length === 0) {
-            tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#64748b;">No documents uploaded yet.</td></tr>';
-            return;
-        }
-
-        Object.entries(db).forEach(([code, doc]) => {
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td><strong>${code}</strong></td>
-                <td>${doc.filename}</td>
-                <td><button class="btn-text text-danger delete-btn" data-code="${code}">Delete</button></td>
-            `;
-            tbody.appendChild(tr);
-        });
-
-        document.querySelectorAll('.delete-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                deleteFromDatabase(e.target.dataset.code);
+        try {
+            const response = await fetch(`${WORKER_URL}/api/list`, {
+                method: 'GET',
+                headers: { 'Authorization': `Bearer ${ADMIN_SECRET}` }
             });
-        });
+            
+            if (!response.ok) throw new Error();
+            const docs = await response.json();
+            
+            tbody.innerHTML = '';
+            if (docs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#64748b;">No active cloud files.</td></tr>';
+                return;
+            }
+
+            docs.forEach(doc => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${doc.code}</strong></td>
+                    <td>${doc.filename}</td>
+                    <td><button class="btn-text text-danger delete-btn" data-code="${doc.code}">Delete</button></td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const targetCode = e.target.dataset.code;
+                    e.target.textContent = "Removing...";
+                    await fetch(`${WORKER_URL}/api/document?code=${targetCode}`, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': `Bearer ${ADMIN_SECRET}` }
+                    });
+                    renderAdminTable();
+                });
+            });
+        } catch {
+            tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#ef4444;">Failed to sync index.</td></tr>';
+        }
     }
 
-    // --- Guest Retrieval Logic ---
-    document.getElementById('form-guest').addEventListener('submit', (e) => {
+    // --- Guest Operations ---
+    document.getElementById('form-guest').addEventListener('submit', async (e) => {
         e.preventDefault();
         
         const code = document.getElementById('guest-code').value.trim().toUpperCase();
         const errorDiv = document.getElementById('guest-error');
         const resultDiv = document.getElementById('guest-result');
-        const db = getDatabase();
+        
+        errorDiv.classList.add('hidden');
 
-        if (db[code]) {
-            // Found
-            errorDiv.classList.add('hidden');
-            resultDiv.classList.remove('hidden');
+        try {
+            const response = await fetch(`${WORKER_URL}/api/document?code=${code}`);
+            if (!response.ok) throw new Error(response.status === 404 ? 'Code not found.' : 'Server error.');
+
+            const doc = await response.json();
             
-            document.getElementById('result-filename').textContent = db[code].filename;
+            resultDiv.classList.remove('hidden');
+            document.getElementById('result-filename').textContent = doc.filename;
             
             const downloadBtn = document.getElementById('btn-download');
-            downloadBtn.href = db[code].data;
-            downloadBtn.download = db[code].filename;
-        } else {
-            // Not Found
+            downloadBtn.href = doc.fileData;
+            downloadBtn.download = doc.filename;
+        } catch (err) {
             resultDiv.classList.add('hidden');
-            errorDiv.textContent = 'Invalid code or document not found.';
+            errorDiv.textContent = err.message;
             errorDiv.classList.remove('hidden');
         }
     });
 
-    // --- Utility Functions ---
+    // --- Helpers ---
     function showStatus(element, message, type) {
         element.textContent = message;
         element.className = `alert alert-${type}`;
