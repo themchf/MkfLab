@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
     // --- Configuration ---
-    const WORKER_URL = "https://mkf-lab.michaelsuperhand.workers.dev"; 
+    const WORKER_URL = "https://mkflab.michaelsuperhand.workers.dev"; 
     const ADMIN_SECRET = "AdminMKFLab"; 
 
     const views = {
